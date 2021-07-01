@@ -250,6 +250,72 @@ class NetworkInterface:
             return self._get_interface_details().get('mtu')
         except (NWException, IndexError):
             raise NWException("Could not get MUT value.")
+    
+    def get_ethtool_data(self, maximum=False):
+        """Calls and parses ethtool -l, then returns the parsed data.
+
+        Requires sudo permission and ethtool.
+
+        This method will raise an NWException if rx/ttx queues are not supported
+        
+        :param maximum: whether to return the maximum or current values from ethtool
+        :type maximum: bool
+
+        :returns: A dict describing the output of ethtool -l
+        :rtype: dict
+        """
+        cmd = "ethtool -l %s" % self.name
+        output = run_command(cmd, self.host, sudo=True)
+        if "Operation not supported" in output:
+            raise NWException("Interface does not support tx/rx queues")
+        elif  "no device matches name" in output:
+            raise NWException("Interface does not exist")
+        else:
+            output = output.strip()
+            output = output.split("\n")
+            for i in range(len(output)):
+                output[i] = output[i].split(":")
+                for j in range(len(output[i])):
+                    output[i][j] = output[i][j].strip()
+            #(len(output)+1)/2 allow ethtool's output to change without breaking the program
+            maximums = output[2:(len(output)+1)//2]
+            current = output[(len(output)+1)//2+1:]
+            if maximum:
+                return dict(maximums)
+            else:
+                return dict(current)
+
+    def get_rx_queues(self):
+        """Returns the number of rx queues configured for this interface.
+
+        Requires sudo permission and ethtool.
+
+        This method will try to get the current number of rx queues value,
+        if fails will raise a NWException.
+        
+        :return: The number of rx queues for this interface
+        """
+        current = self.get_ethtool_data(maximum=False)
+        if 'RX' not in current:
+            raise NWException("Ethtools did not return RX data")
+        else:
+            return int(current['RX'])
+    
+    def get_tx_queues(self):
+        """Returns the number of tx queues configured for this interface.
+
+        Requires sudo permission and ethtool.
+
+        This method will try to get the current number of tx queues value,
+        if fails will raise a NWException.
+
+        :return: The number of tx queues for this interface
+        """
+        current = self.get_ethtool_data(maximum=False)
+        if 'TX' not in current:
+            raise NWException("Ethtools did not return TX data")
+        else:
+            return int(current['TX'])
 
     def ping_check(self, peer_ip, count=2, options=None):
         """This method will try to ping a peer address (IPv4 or IPv6).
@@ -334,6 +400,52 @@ class NetworkInterface:
         wait_for(self.is_link_up, timeout=timeout)
         if int(mtu) != self.get_mtu():
             raise NWException("Failed to set MTU.")
+
+    def set_rx_queues(self, num_queues):
+        """Sets a new number of rx queues for this interface.
+
+        This method will try to set a new number of rx queues for this
+        interface, if fails it will raise a NWException. 
+
+        Requires sudo permission and ethtool.
+
+        :param num_queues:  number of rx queues to be set. This must be an int.
+        """
+        maximums = self.get_ethtool_data(maximum=True)
+        if 'RX' not in maximums:
+            raise NWException("Ethtools did not return maximum RX data")
+        else:
+            max_rx = int(maximums['RX'])
+            if max_rx < num_queues:
+                raise NWException("Exceeded the maximum number of RX queues")
+            else:
+                cmd = "ethtool -L %s rx %s" % (self.name, str(num_queues))
+                output = run_command(cmd, self.host, sudo=True)
+                if "Operation not supported" in output:
+                    raise NWException("Interface does not support setting RX queues")
+
+    def set_tx_queues(self, num_queues):
+        """Sets a new number of tx queues for this interface.
+
+        This method will try to set a new number of tx queues for this
+        interface, if fails it will raise a NWException. 
+
+        Requires sudo permission and ethtool.
+
+        :param num_queues:  number of tx queues to be set. This must be an int.
+        """
+        maximums = self.get_ethtool_data(maximum=True)
+        if 'TX' not in maximums:
+            raise NWException("Ethtools did not return maximum TX data")
+        else:
+            max_tx = int(maximums['TX'])
+            if max_tx < num_queues:
+                raise NWException("Exceeded the maximum number of TX queues")
+            else:
+                cmd = "ethtool -L %s tx %s" % (self.name, str(num_queues))
+                output = run_command(cmd, self.host, sudo=True)
+                if "Operation not supported" in output:
+                    raise NWException("Interface does not support setting TX queues")
 
     def remove_ipaddr(self, ipaddr, netmask):
         """Removes an IP address from this interface.
