@@ -250,14 +250,14 @@ class NetworkInterface:
             return self._get_interface_details().get('mtu')
         except (NWException, IndexError):
             raise NWException("Could not get MUT value.")
-    
+
     def get_ethtool_queue_data(self, maximum=False):
         """Calls and parses ethtool -l, then returns the parsed data.
 
         Requires sudo permission and ethtool.
 
         This method will raise an NWException if rx/ttx queues are not supported
-        
+
         :param maximum: whether to return the maximum or current values from ethtool
         :type maximum: bool
 
@@ -268,7 +268,7 @@ class NetworkInterface:
         output = run_command(cmd, self.host, sudo=True)
         if "Operation not supported" in output:
             raise NWException("Interface does not support tx/rx queues")
-        elif  "no device matches name" in output:
+        elif "no device matches name" in output:
             raise NWException("Interface does not exist")
         else:
             output = output.strip()
@@ -277,7 +277,7 @@ class NetworkInterface:
                 output[i] = output[i].split(":")
                 for j in range(len(output[i])):
                     output[i][j] = output[i][j].strip()
-            #(len(output)+1)/2 allow ethtool's output to change without breaking the program
+            # (len(output)+1)/2 allow ethtool's output to change without breaking the program
             maximums = output[2:(len(output)+1)//2]
             current = output[(len(output)+1)//2+1:]
             if maximum:
@@ -292,7 +292,7 @@ class NetworkInterface:
 
         This method will try to get the current number of rx queues value,
         if fails will raise a NWException.
-        
+
         :return: The number of rx queues for this interface
         """
         current = self.get_ethtool_queue_data(maximum=False)
@@ -300,7 +300,7 @@ class NetworkInterface:
             raise NWException("Ethtools did not return RX data")
         else:
             return int(current['RX'])
-    
+
     def get_tx_queues(self):
         """Returns the number of tx queues configured for this interface.
 
@@ -405,7 +405,7 @@ class NetworkInterface:
         """Sets a new number of rx queues for this interface.
 
         This method will try to set a new number of rx queues for this
-        interface, if fails it will raise a NWException. 
+        interface, if fails it will raise a NWException.
 
         Requires sudo permission and ethtool.
 
@@ -422,13 +422,14 @@ class NetworkInterface:
                 cmd = "ethtool -L %s rx %s" % (self.name, str(num_queues))
                 output = run_command(cmd, self.host, sudo=True)
                 if "Operation not supported" in output:
-                    raise NWException("Interface does not support setting RX queues")
+                    raise NWException(
+                        "Interface does not support setting RX queues")
 
     def set_tx_queues(self, num_queues):
         """Sets a new number of tx queues for this interface.
 
         This method will try to set a new number of tx queues for this
-        interface, if fails it will raise a NWException. 
+        interface, if fails it will raise a NWException.
 
         Requires sudo permission and ethtool.
 
@@ -445,9 +446,10 @@ class NetworkInterface:
                 cmd = "ethtool -L %s tx %s" % (self.name, str(num_queues))
                 output = run_command(cmd, self.host, sudo=True)
                 if "Operation not supported" in output:
-                    raise NWException("Interface does not support setting TX queues")
-    
-    def get_ethtool_offload_data(self:
+                    raise NWException(
+                        "Interface does not support setting TX queues")
+
+    def get_ethtool_offload_data(self):
         """Calls and parses ethtool -k, then returns the parsed data.
 
         Requires sudo permission and ethtool.
@@ -459,7 +461,7 @@ class NetworkInterface:
         output = run_command(cmd, self.host, sudo=True)
         if "Operation not supported" in output:
             raise NWException("Interface does not support offloads")
-        elif  "no device matches name" in output:
+        elif "no device matches name" in output:
             raise NWException("Interface does not exist")
         else:
             output = output.strip()
@@ -468,7 +470,6 @@ class NetworkInterface:
                 output[i] = output[i].split(":")
                 for j in range(len(output[i])):
                     output[i][j] = output[i][j].strip()
-            #(len(output)+1)/2 allow ethtool's output to change without breaking the program
             output = output[1:]
             return dict(output)
 
@@ -476,17 +477,17 @@ class NetworkInterface:
         """Returns if TCP Segmentation Offload is enabled or not
 
         Requires sudo permission and ethtool.
-        
+
         :return: A string describing the state of TSO. "on" if enabled, "off" if not and the addition of "[fixed]" if immutable
         :rtype: str
         """
-        data = self.get_ethtool_queue_data(maximum=False)
+        data = self.get_ethtool_offload_data()
         if 'tcp-segmentation-offload' not in data:
             raise NWException("Ethtools did not return TSO data")
         else:
             return data['tcp-segmentation-offload']
-    
-    def set_TSO(self, enabled=True):
+
+    def set_TSO(self, enabled):
         """Enables or disables TCP Segment Offload
 
         Requires sudo permission and ethtool.
@@ -496,120 +497,121 @@ class NetworkInterface:
         if "fixed" in self.get_TSO():
             raise NWException("TSO is immutable")
         else:
-                cmd = "ethtool -K %s tcp-segmentation-offload %s" % (self.name, str(enabled))
-                output = run_command(cmd, self.host, sudo=True)
-    
-    def get_UFO(self, enabled=True):
+            cmd = "ethtool -K %s tcp-segmentation-offload %s" % (
+                self.name, str(enabled))
+            run_command(cmd, self.host, sudo=True)
+
+    def get_UFO(self):
         """Returns if UDP Fragmentation Offload is enabled or not
 
         Requires sudo permission and ethtool.
-        
+
         :return: A string describing the state of UFO "on" if enabled, "off" if not and the addition of "[fixed]" if immutable
         :rtype: bool
         """
-        data = self.get_ethtool_queue_data(maximum=False)
+        data = self.get_ethtool_offload_data()
         if 'udp-fragmentation-offload' not in data:
             raise NWException("Ethtools did not return UFO data")
         else:
             return data['udp-fragmentation-offload']
 
-    def set_UFO(self, enabled=True):
+    def set_UFO(self, enabled):
         """Enables or disables UDP Fragmentation Offload
 
         Requires sudo permission and ethtool.
 
         :param enabled:  Whether to enable UFO or not. "on" if to enable, "off" if to disable
         """
-        if "fixed" in self.get_TSO():
-            raise NWException("TSO is immutable")
+        if "fixed" in self.get_UFO():
+            raise NWException("UFO is immutable")
         else:
-                cmd = "ethtool -K %s udp-fragmentation-offload %s" % (self.name, str(enabled))
-                output = run_command(cmd, self.host, sudo=True)
-    
+            cmd = "ethtool -K %s udp-fragmentation-offload %s" % (
+                self.name, str(enabled))
+            run_command(cmd, self.host, sudo=True)
 
     def get_GSO(self):
         """Returns if Generic Segmentation Offload is enabled or not
 
         Requires sudo permission and ethtool.
-        
+
         :return: A string describing the state of GSO "on" if enabled, "off" if not and the addition of "[fixed]" if immutable
         :rtype: bool
         """
-        data = self.get_ethtool_queue_data(maximum=False)
+        data = self.get_ethtool_offload_data()
         if 'generic-segmentation-offload' not in data:
             raise NWException("Ethtools did not return GSO data")
         else:
             return data['generic-segmentation-offload']
 
-    def set_GSO(self, enabled=True):
+    def set_GSO(self, enabled):
         """Enables or disables Generic Segmentation Offload
 
         Requires sudo permission and ethtool.
 
         :param enabled:  Whether to enable GSO or not. "on" if to enable, "off" if to disable
         """
-        if "fixed" in self.get_TSO():
-            raise NWException("TSO is immutable")
+        if "fixed" in self.get_GSO():
+            raise NWException("GSO is immutable")
         else:
-                cmd = "ethtool -K %s generic-segmentation-offload %s" % (self.name, str(enabled))
-                output = run_command(cmd, self.host, sudo=True)
-    
+            cmd = "ethtool -K %s generic-segmentation-offload %s" % (
+                self.name, str(enabled))
+            run_command(cmd, self.host, sudo=True)
 
     def get_LRO(self):
         """Returns if Large Receive Offload is enabled or not
 
         Requires sudo permission and ethtool.
-        
+
         :return: A string describing the state of LRO "on" if enabled, "off" if not and the addition of "[fixed]" if immutable
         :rtype: bool
         """
-        data = self.get_ethtool_queue_data(maximum=False)
+        data = self.get_ethtool_offload_data()
         if 'large-receive-offload' not in data:
             raise NWException("Ethtools did not return LRO data")
         else:
             return data['large-receive-offload']
 
-    def set_LRO(self, enabled=True):
+    def set_LRO(self, enabled):
         """Enables or disables Large Receive Offload
 
         Requires sudo permission and ethtool.
 
         :param enabled:  Whether to enable LRO or not. "on" if to enable, "off" if to disable
         """
-        if "fixed" in self.get_TSO():
-            raise NWException("TSO is immutable")
+        if "fixed" in self.get_LRO():
+            raise NWException("LRO is immutable")
         else:
-                cmd = "ethtool -K %s large-receive-offload %s" % (self.name, str(enabled))
-                output = run_command(cmd, self.host, sudo=True)
-    
+            cmd = "ethtool -K %s large-receive-offload %s" % (
+                self.name, str(enabled))
+            run_command(cmd, self.host, sudo=True)
 
     def get_GRO(self):
         """Returns if Generic Receive Offload is enabled or not
 
         Requires sudo permission and ethtool.
-        
+
         :return: A string describing the state of GRO "on" if enabled, "off" if not and the addition of "[fixed]" if immutable
         :rtype: bool
         """
-        data = self.get_ethtool_queue_data(maximum=False)
+        data = self.get_ethtool_offload_data()
         if 'generic-receive-offload' not in data:
             raise NWException("Ethtools did not return GRO data")
         else:
             return data['generic-receive-offload']
 
-    def set_GRO(self, enabled=True):
+    def set_GRO(self, enabled):
         """Enables or disables Generic Receive Offload
 
         Requires sudo permission and ethtool.
 
         :param enabled:  Whether to enable GRO or not. "on" if to enable, "off" if to disable
         """
-        if "fixed" in self.get_TSO():
-            raise NWException("TSO is immutable")
+        if "fixed" in self.get_GRO():
+            raise NWException("GRO is immutable")
         else:
-                cmd = "ethtool -K %s generic-receive-offload %s" % (self.name, str(enabled))
-                output = run_command(cmd, self.host, sudo=True)
-    
+            cmd = "ethtool -K %s generic-receive-offload %s" % (
+                self.name, str(enabled))
+            run_command(cmd, self.host, sudo=True)
 
     def remove_ipaddr(self, ipaddr, netmask):
         """Removes an IP address from this interface.
